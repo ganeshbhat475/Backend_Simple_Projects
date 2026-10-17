@@ -1,4 +1,5 @@
 const axios = require('axios')
+const logUpstreamError = require('./log-upstream-error')
 
 const weatherDescriptions = {
     0: 'Clear sky',
@@ -51,10 +52,12 @@ const forecast = async (latitude, longitude, callback) => {
             timeout: 10000
         })
     } catch (error) {
+        logUpstreamError('Weather forecast', error)
         if (error.code === 'ECONNABORTED') {
             callback('Weather service timed out. Please try again.', undefined, 504)
         } else if (error.response) {
-            callback('Weather service returned an error. Please try again.', undefined, 502)
+            const statusCode = error.response.status === 429 || error.response.status >= 500 ? 503 : 502
+            callback('Weather service returned an error. Please try again.', undefined, statusCode)
         } else {
             callback('Unable to connect to weather service!', undefined, 503)
         }

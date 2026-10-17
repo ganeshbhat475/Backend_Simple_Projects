@@ -1,4 +1,5 @@
 const axios = require('axios')
+const logUpstreamError = require('./log-upstream-error')
 
 const geocode = async (address, callback) => {
     let response
@@ -13,10 +14,12 @@ const geocode = async (address, callback) => {
             timeout: 10000
         })
     } catch (error) {
+        logUpstreamError('Geocoding', error)
         if (error.code === 'ECONNABORTED') {
             callback('Location service timed out. Please try again.', undefined, 504)
         } else if (error.response) {
-            callback('Location service returned an error. Please try again.', undefined, 502)
+            const statusCode = error.response.status === 429 || error.response.status >= 500 ? 503 : 502
+            callback('Location service returned an error. Please try again.', undefined, statusCode)
         } else {
             callback('Unable to connect to location services!', undefined, 503)
         }
