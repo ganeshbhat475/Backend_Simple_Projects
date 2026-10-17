@@ -1,60 +1,42 @@
 const axios = require('axios')
 const logUpstreamError = require('./log-upstream-error')
 
-const weatherDescriptions = {
-    0: 'Clear sky',
-    1: 'Mainly clear',
-    2: 'Partly cloudy',
-    3: 'Overcast',
-    45: 'Foggy',
-    48: 'Depositing rime fog',
-    51: 'Light drizzle',
-    53: 'Moderate drizzle',
-    55: 'Dense drizzle',
-    56: 'Light freezing drizzle',
-    57: 'Dense freezing drizzle',
-    61: 'Slight rain',
-    63: 'Moderate rain',
-    65: 'Heavy rain',
-    66: 'Light freezing rain',
-    67: 'Heavy freezing rain',
-    71: 'Slight snow',
-    73: 'Moderate snow',
-    75: 'Heavy snow',
-    77: 'Snow grains',
-    80: 'Slight rain showers',
-    81: 'Moderate rain showers',
-    82: 'Violent rain showers',
-    85: 'Slight snow showers',
-    86: 'Heavy snow showers',
-    95: 'Thunderstorm',
-    96: 'Thunderstorm with slight hail',
-    99: 'Thunderstorm with heavy hail'
-}
-
 const forecast = async (latitude, longitude, callback) => {
     if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
         callback('A valid latitude and longitude are required.', undefined, 400)
         return
     }
 
+    const apiKey = process.env.OPENWEATHERMAP_API_KEY
+    if (!apiKey) {
+        callback('Weather service is not configured. Please contact the site administrator.', undefined, 503)
+        return
+    }
+
     let response
     try {
-        response = await axios.get('https://api.open-meteo.com/v1/forecast', {
+        response = await axios.get('https://api.openweathermap.org/data/2.5/forecast', {
             params: {
-                latitude,
-                longitude,
-                current: 'temperature_2m',
-                daily: 'weather_code,precipitation_probability_max',
-                temperature_unit: 'fahrenheit',
-                timezone: 'auto'
+                lat: latitude,
+                lon: longitude,
+                cnt: 1,
+                units: 'imperial',
+                appid: apiKey
             },
             timeout: 10000
         })
     } catch (error) {
-        logUpstreamError('Weather forecast', error)
+        logUpstreamError('OpenWeatherMap forecast', error)
         if (error.code === 'ECONNABORTED') {
             callback('Weather service timed out. Please try again.', undefined, 504)
+        } else if (error.response && error.response.status === 401) {
+            callback(
+                'OpenWeatherMap rejected the API key. Verify that it is correct and active; newly created keys may take up to 2 hours to activate.',
+                undefined,
+                503
+            )
+        } else if (error.response && error.response.status === 403) {
+            callback('OpenWeatherMap denied access to the forecast API. Check your account access.', undefined, 503)
         } else if (error.response) {
             const statusCode = error.response.status === 429 || error.response.status >= 500 ? 503 : 502
             callback('Weather service returned an error. Please try again.', undefined, statusCode)
@@ -64,27 +46,26 @@ const forecast = async (latitude, longitude, callback) => {
         return
     }
 
-    const current = response.data && response.data.current
-    const daily = response.data && response.data.daily
-    const weatherCode = daily && Array.isArray(daily.weather_code) && daily.weather_code[0]
-    const precipitationProbability = daily &&
-        Array.isArray(daily.precipitation_probability_max) &&
-        daily.precipitation_probability_max[0]
+    const nextForecast = response.data &&
+        Array.isArray(response.data.list) &&
+        response.data.list[0]
+    const conditions = nextForecast && Array.isArray(nextForecast.weather) && nextForecast.weather[0]
+    const temperature = nextForecast && nextForecast.main && nextForecast.main.temp
+    const precipitationProbability = nextForecast && nextForecast.pop
 
     if (
-        !current ||
-        !Number.isFinite(current.temperature_2m) ||
-        !Number.isFinite(weatherCode) ||
+        !conditions ||
+        typeof conditions.description !== 'string' ||
+        !Number.isFinite(temperature) ||
         !Number.isFinite(precipitationProbability)
     ) {
         callback('Weather service returned an invalid forecast.', undefined, 502)
         return
     }
 
-    const summary = weatherDescriptions[weatherCode] || 'Weather conditions unavailable'
     callback(
         undefined,
-        `${summary}. It is currently ${current.temperature_2m} degrees out. There is a ${precipitationProbability}% chance of rain.`
+        `The next 3 hours: ${conditions.description}. Forecast temperature is ${temperature}°F, with a ${Math.round(precipitationProbability * 100)}% chance of precipitation.`
     )
 }
 

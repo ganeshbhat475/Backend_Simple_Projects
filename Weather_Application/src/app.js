@@ -1,4 +1,6 @@
 const path = require('path')
+require('dotenv').config({ path: path.join(__dirname, '../.env') })
+
 const express = require('express')
 const hbs = require('hbs')
 const geocode = require('./utils/geocode')
