@@ -1,0 +1,21 @@
+{
+  "name": "chat-app",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=22.14.0"
+  },
+  "author": "Ganesh Bhat",
+  "license": "ISC",
+  "dependencies": {
+    "bad-words": "^4.1.5",
+    "express": "^5.3.0",
+    "socket.io": "^4.8.4"
+  }
+}
